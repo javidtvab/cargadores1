@@ -1,89 +1,77 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from app.database import get_db
-from app.models import Session, Charger, AppliedRate
+from app.models import Session as ChargingSession, User, Charger
 
 router = APIRouter()
 
-@router.get("/summary")
-def get_statistics(db: Session = Depends(get_db)):
+@router.get("/summary", response_model=dict)
+def get_summary_statistics(db: Session = Depends(get_db)):
     """
-    Obtener estadísticas generales de las sesiones de carga.
-
-    Respuesta:
-    - total_sessions (int): Número total de sesiones de carga.
-    - total_energy (float): Energía total consumida en kWh.
-    - total_revenue (float): Ingresos totales generados.
+    Obtener estadísticas resumidas del sistema.
     """
     try:
-        total_sessions = db.query(func.count(Session.id)).scalar()
-        total_energy = db.query(func.sum(Session.energy_consumed)).scalar() or 0.0
-        total_revenue = db.query(func.sum(Session.total_cost)).scalar() or 0.0
+        total_users = db.query(func.count(User.id)).scalar()
+        total_chargers = db.query(func.count(Charger.id)).scalar()
+        total_sessions = db.query(func.count(ChargingSession.id)).scalar()
+        total_energy_consumed = db.query(func.sum(ChargingSession.energy_consumed)).scalar() or 0.0
+        total_revenue = db.query(func.sum(ChargingSession.total_cost)).scalar() or 0.0
 
         return {
+            "total_users": total_users,
+            "total_chargers": total_chargers,
             "total_sessions": total_sessions,
-            "total_energy": total_energy,
-            "total_revenue": total_revenue,
+            "total_energy_consumed": round(total_energy_consumed, 2),
+            "total_revenue": round(total_revenue, 2)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving summary statistics: {str(e)}")
 
-@router.get("/chargers")
-def get_charger_statistics(db: Session = Depends(get_db)):
+@router.get("/user/{user_id}", response_model=dict)
+def get_user_statistics(user_id: int, db: Session = Depends(get_db)):
     """
-    Obtener estadísticas detalladas por cargador.
-
-    Respuesta:
-    - Lista de cargadores con sus estadísticas:
-      - charger_id (int): ID del cargador.
-      - charger_name (str): Nombre del cargador.
-      - total_sessions (int): Número total de sesiones en ese cargador.
-      - total_energy (float): Energía total consumida por ese cargador en kWh.
-      - total_revenue (float): Ingresos generados por ese cargador.
+    Obtener estadísticas para un usuario específico.
     """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     try:
-        chargers_stats = (
-            db.query(
-                Charger.id.label("charger_id"),
-                Charger.name.label("charger_name"),
-                func.count(Session.id).label("total_sessions"),
-                func.sum(Session.energy_consumed).label("total_energy"),
-                func.sum(Session.total_cost).label("total_revenue"),
-            )
-            .join(Session, Charger.id == Session.charger_id)
-            .group_by(Charger.id)
-            .all()
-        )
+        user_sessions = db.query(ChargingSession).filter(ChargingSession.user_id == user_id).all()
+        total_sessions = len(user_sessions)
+        total_energy = sum(session.energy_consumed for session in user_sessions)
+        total_spent = sum(session.total_cost for session in user_sessions)
 
-        return chargers_stats
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "total_sessions": total_sessions,
+            "total_energy_consumed": round(total_energy, 2),
+            "total_spent": round(total_spent, 2)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving user statistics: {str(e)}")
+
+@router.get("/charger/{charger_id}", response_model=dict)
+def get_charger_statistics(charger_id: int, db: Session = Depends(get_db)):
+    """
+    Obtener estadísticas para un cargador específico.
+    """
+    charger = db.query(Charger).filter(Charger.id == charger_id).first()
+    if not charger:
+        raise HTTPException(status_code=404, detail="Charger not found")
+    try:
+        charger_sessions = db.query(ChargingSession).filter(ChargingSession.charger_id == charger_id).all()
+        total_sessions = len(charger_sessions)
+        total_energy = sum(session.energy_consumed for session in charger_sessions)
+        total_revenue = sum(session.total_cost for session in charger_sessions)
+
+        return {
+            "charger_id": charger.id,
+            "charger_name": charger.name,
+            "total_sessions": total_sessions,
+            "total_energy_consumed": round(total_energy, 2),
+            "total_revenue_generated": round(total_revenue, 2)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving charger statistics: {str(e)}")
-
-@router.get("/rates")
-def get_rate_statistics(db: Session = Depends(get_db)):
-    """
-    Obtener estadísticas detalladas por tarifas aplicadas.
-
-    Respuesta:
-    - Lista de tarifas con sus estadísticas:
-      - rate_id (int): ID de la tarifa.
-      - description (str): Descripción de la tarifa.
-      - total_sessions (int): Número total de sesiones con esta tarifa.
-      - total_revenue (float): Ingresos generados por esta tarifa.
-    """
-    try:
-        rate_stats = (
-            db.query(
-                AppliedRate.rate_id.label("rate_id"),
-                AppliedRate.description.label("description"),
-                func.count(AppliedRate.id).label("total_sessions"),
-                func.sum(AppliedRate.total_cost).label("total_revenue"),
-            )
-            .group_by(AppliedRate.rate_id, AppliedRate.description)
-            .all()
-        )
-
-        return rate_stats
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving rate statistics: {str(e)}")
