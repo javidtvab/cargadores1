@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse
 from app.database import get_db
 from app.models import Invoice, Session as ChargingSession
+from app.schemas import InvoiceBase, InvoiceCreate, InvoiceResponse
 from app.utils.pdf_generator import generate_invoice_pdf
-from fastapi.responses import FileResponse
 import os
 
 router = APIRouter()
 
-@router.get("/invoices", response_model=list)
+@router.get("/", response_model=list[InvoiceResponse])
 def get_all_invoices(db: Session = Depends(get_db)):
     """
     Obtener todas las facturas.
@@ -19,51 +20,40 @@ def get_all_invoices(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving invoices: {str(e)}")
 
-@router.get("/invoices/{invoice_id}", response_model=dict)
+@router.get("/{invoice_id}", response_model=InvoiceResponse)
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     """
-    Obtener los detalles de una factura específica.
+    Obtener una factura específica por su ID.
     """
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    return {
-        "id": invoice.id,
-        "session_id": invoice.session_id,
-        "total_cost": invoice.total_cost,
-        "created_at": invoice.created_at
-    }
+    return invoice
 
-@router.post("/invoices/generate/{session_id}", response_model=dict)
-def generate_invoice(session_id: int, db: Session = Depends(get_db)):
+@router.post("/", response_model=InvoiceResponse)
+def create_invoice(invoice_data: InvoiceCreate, db: Session = Depends(get_db)):
     """
-    Generar una factura para una sesión de carga específica.
+    Crear una nueva factura para una sesión de carga.
     """
-    session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
+    session = db.query(ChargingSession).filter(ChargingSession.id == invoice_data.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    if db.query(Invoice).filter(Invoice.session_id == session_id).first():
+    if db.query(Invoice).filter(Invoice.session_id == invoice_data.session_id).first():
         raise HTTPException(status_code=400, detail="Invoice already exists for this session")
-
+    
     try:
-        invoice = Invoice(
-            session_id=session.id,
-            total_cost=session.total_cost
+        new_invoice = Invoice(
+            session_id=invoice_data.session_id,
+            total_cost=invoice_data.total_cost
         )
-        db.add(invoice)
+        db.add(new_invoice)
         db.commit()
-        db.refresh(invoice)
-        return {
-            "message": "Invoice generated successfully",
-            "invoice_id": invoice.id,
-            "total_cost": invoice.total_cost,
-            "created_at": invoice.created_at
-        }
+        db.refresh(new_invoice)
+        return new_invoice
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating invoice: {str(e)}")
 
-@router.get("/invoices/download/{invoice_id}")
+@router.get("/download/{invoice_id}")
 def download_invoice(invoice_id: int, db: Session = Depends(get_db)):
     """
     Descargar una factura en formato PDF.
@@ -71,15 +61,31 @@ def download_invoice(invoice_id: int, db: Session = Depends(get_db)):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-
+    
     session = db.query(ChargingSession).filter(ChargingSession.id == invoice.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Associated session not found")
+    
+    try:
+        # Generar PDF de la factura
+        pdf_path = generate_invoice_pdf(invoice, session)
+        if not os.path.exists(pdf_path):
+            raise HTTPException(status_code=500, detail="Error generating PDF file")
+        return FileResponse(pdf_path, media_type="application/pdf", filename=f"invoice_{invoice.id}.pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating or retrieving PDF: {str(e)}")
 
-    # Generar el PDF de la factura
-    pdf_file = generate_invoice_pdf(invoice, session)
-
-    if not os.path.exists(pdf_file):
-        raise HTTPException(status_code=500, detail="Error generating PDF")
-
-    return FileResponse(pdf_file, media_type="application/pdf", filename=f"invoice_{invoice.id}.pdf")
+@router.delete("/{invoice_id}", response_model=dict)
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """
+    Eliminar una factura específica por su ID.
+    """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    try:
+        db.delete(invoice)
+        db.commit()
+        return {"message": "Invoice deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting invoice: {str(e)}")
