@@ -7,24 +7,22 @@ const userController = require('../controllers/userController');
 const chargerController = require('../controllers/chargerController');
 const stripeController = require('../controllers/stripeController');
 
-// Define routes
-// User routes
-router.get('/users', userController.getAllUsers);
-router.post('/users', userController.createUser);
-router.get('/users/:id', userController.getUserById);
-router.put('/users/:id', userController.updateUser);
-router.delete('/users/:id', userController.deleteUser);
+// Import middlewares
+const { authenticate, adminAuthenticate } = require('./middlewares');
 
-// Charger routes
+// Public routes (no authentication required)
 router.get('/chargers', chargerController.getAllChargers);
-router.post('/chargers', chargerController.createCharger);
-router.get('/chargers/:id', chargerController.getChargerById);
-router.put('/chargers/:id', chargerController.updateCharger);
-router.delete('/chargers/:id', chargerController.deleteCharger);
-
-// Stripe routes
 router.post('/payments/initiate', stripeController.initiatePayment);
 router.post('/payments/complete', stripeController.completePayment);
+
+// Protected admin routes
+router.use('/admin', adminAuthenticate); // Apply admin authentication to all admin routes
+
+// Admin-specific routes
+router.get('/admin/users', userController.getAllUsers);
+router.post('/admin/tariffs', chargerController.createTariff);
+router.put('/admin/tariffs/:id', chargerController.updateTariff);
+router.delete('/admin/tariffs/:id', chargerController.deleteTariff);
 
 // Export the router
 module.exports = router;
