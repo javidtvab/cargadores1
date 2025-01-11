@@ -7,7 +7,7 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-// Middleware for authentication (example)
+// Middleware for general user authentication (example)
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -24,6 +24,23 @@ function authenticate(req, res, next) {
   }
 }
 
+// Middleware for admin authentication
+function adminAuthenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  // Example admin token verification logic
+  const token = authHeader.split(' ')[1];
+  if (token === 'admin_token_example') {
+    next(); // Allow access
+  } else {
+    res.status(403).json({ success: false, message: 'Forbidden: Admin access required' });
+  }
+}
+
 // Middleware for database connection
 function attachDatabase(req, res, next) {
   if (!req.db) {
@@ -34,6 +51,7 @@ function attachDatabase(req, res, next) {
 
 module.exports = {
   errorHandler,
-  authenticate,
+  authenticate, // For general user routes
+  adminAuthenticate, // For admin routes
   attachDatabase,
 };
