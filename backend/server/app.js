@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 // Import configurations and routes
 const dbConfig = require('../config/dbConfig');
 const routes = require('./routes');
+const { errorHandler } = require('./middlewares');
 
 // Initialize Express app
 const app = express();
@@ -41,13 +42,7 @@ app.use((req, res, next) => {
 app.use('/api', routes);
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-  });
-});
+app.use(errorHandler);
 
 // Start the server
 const PORT = process.env.PORT || 5000;
