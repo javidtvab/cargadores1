@@ -1,5 +1,6 @@
 // Import required modules
 import React from 'react';
+import PropTypes from 'prop-types';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -10,6 +11,11 @@ function ProtectedRoute({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
 }
+
+// Add PropTypes validation
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 
 function App() {
   return (
