@@ -22,11 +22,11 @@ class OCPPService extends EventEmitter {
 
   // Start a charging session
   startCharging(chargerId, connector, sessionId) {
-    if (!this.chargers[chargerId] || !this.chargers[chargerId][connector]) {
+    const connectorState = this.chargers[chargerId]?.[connector];
+    if (!connectorState) {
       throw new Error(`Charger or connector not found: ${chargerId} - ${connector}`);
     }
 
-    const connectorState = this.chargers[chargerId][connector];
     if (connectorState.status !== 'available') {
       throw new Error(`Connector ${connector} on charger ${chargerId} is not available.`);
     }
@@ -39,11 +39,11 @@ class OCPPService extends EventEmitter {
 
   // Stop a charging session
   stopCharging(chargerId, connector) {
-    if (!this.chargers[chargerId] || !this.chargers[chargerId][connector]) {
+    const connectorState = this.chargers[chargerId]?.[connector];
+    if (!connectorState) {
       throw new Error(`Charger or connector not found: ${chargerId} - ${connector}`);
     }
 
-    const connectorState = this.chargers[chargerId][connector];
     if (connectorState.status !== 'occupied') {
       throw new Error(`Connector ${connector} on charger ${chargerId} is not occupied.`);
     }
