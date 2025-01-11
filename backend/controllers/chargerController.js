@@ -73,10 +73,63 @@ async function deleteCharger(req, res) {
   }
 }
 
+// Create a new tariff
+async function createTariff(req, res) {
+  try {
+    const { name, rate, timeSlotStart, timeSlotEnd } = req.body;
+    const result = await req.db.query(
+      'INSERT INTO tariffs (name, rate, time_slot_start, time_slot_end) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, rate, timeSlotStart, timeSlotEnd]
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Failed to create tariff' });
+  }
+}
+
+// Update an existing tariff
+async function updateTariff(req, res) {
+  try {
+    const { id } = req.params;
+    const { name, rate, timeSlotStart, timeSlotEnd } = req.body;
+    const result = await req.db.query(
+      'UPDATE tariffs SET name = $1, rate = $2, time_slot_start = $3, time_slot_end = $4 WHERE id = $5 RETURNING *',
+      [name, rate, timeSlotStart, timeSlotEnd, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Tariff not found' });
+    }
+    res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Failed to update tariff' });
+  }
+}
+
+// Delete a tariff
+async function deleteTariff(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await req.db.query('DELETE FROM tariffs WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Tariff not found' });
+    }
+    res.status(200).json({ success: true, message: 'Tariff deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Failed to delete tariff' });
+  }
+}
+
 module.exports = {
   getAllChargers,
   getChargerById,
   createCharger,
   updateCharger,
   deleteCharger,
+  createTariff,
+  updateTariff,
+  deleteTariff,
 };
+
